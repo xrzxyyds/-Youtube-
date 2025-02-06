@@ -1,0 +1,119 @@
+// ==UserScript==
+// @name         YouTube 广告跳过
+// @namespace    http://tampermonkey.net/
+// @version      0.4.0
+// @description  自动跳过 YouTube 广告
+// @author       You
+// @match        *://www.youtube.com/*  
+// @grant        none
+// @license      MIT
+// @updateURL    https://raw.githubusercontent.com/yourusername/yourrepository/main/youtube-ad-skipper.user.js  // 替换为你的脚本的 raw 链接，用于自动更新
+// @downloadURL  https://raw.githubusercontent.com/yourusername/yourrepository/main/youtube-ad-skipper.user.js  // 替换为你的脚本的 raw 链接，用于自动下载
+// ==/UserScript==
+
+(function() {
+    'use strict';
+
+    // 功能开关：是否自动点击跳过按钮
+    const autoClickSkipButton = true;
+
+    // 功能开关：是否自动静音广告
+    const autoMuteAd = true;
+
+    // 功能开关：是否在广告结束后取消静音（只在 autoMuteAd 为 true 时生效）
+    const unmuteAfterAd = true;
+
+    // 监听广告出现并处理
+    const observer = new MutationObserver((mutations) => {
+        mutations.forEach((mutation) => {
+            if (mutation.addedNodes) {
+                mutation.addedNodes.forEach((node) => {
+                    // 跳过可跳过的广告
+                    if (node.classList && node.classList.contains('ytp-ad-player-overlay-instream-skippable-ad')) {
+                        const skipButton = document.querySelector('.ytp-ad-skip-button, .ytp-ad-skip-button-modern');
+                        if (skipButton && autoClickSkipButton) {
+                            skipButton.click();
+                            console.log('YouTube 广告已跳过 (可跳过广告)');
+                        }
+                    }
+
+                    // 静音广告 (找到包含广告的容器，然后静音)
+                    if (node.classList && node.classList.contains('ytp-ad-player-overlay')) {
+                        const videoPlayer = document.querySelector('.video-stream.html5-main-video');  // 更精确地选择播放器
+                        if (videoPlayer && autoMuteAd) {
+                            videoPlayer.muted = true;
+                            console.log('YouTube 广告已静音');
+
+                            // 在广告结束后取消静音
+                            if (unmuteAfterAd) {
+                                const adEndedObserver = new MutationObserver((adMutations) => {
+                                    adMutations.forEach((adMutation) => {
+                                        if (adMutation.removedNodes) {
+                                            adMutation.removedNodes.forEach((adNode) => {
+                                                if (adNode.classList && adNode.classList.contains('ytp-ad-player-overlay')) {
+                                                    videoPlayer.muted = false;
+                                                    console.log('YouTube 广告已结束，已取消静音');
+                                                    adEndedObserver.disconnect(); // 停止观察，避免重复执行
+                                                }
+                                            });
+                                        }
+                                    });
+                                });
+
+                                adEndedObserver.observe(document.querySelector('#movie_player'), {
+                                    childList: true,
+                                    subtree: true,
+                                    attributes: false,
+                                    characterData: false
+                                });
+                            }
+                        }
+                    }
+
+                    // 跳过不可跳过的广告 (依赖广告结束)
+                    if (node.classList && node.classList.contains('ytp-ad-player-overlay-instream-ad')) {
+                        const videoPlayer = document.querySelector('.video-stream.html5-main-video');  // 更精确地选择播放器
+                        if (videoPlayer) {
+                            const adDuration = document.querySelector('.ytp-ad-duration-remaining'); // 获取广告剩余时间
+                            if (adDuration) {
+                                const durationText = adDuration.innerText;
+                                const timeParts = durationText.replace('-', '').replace('秒', '').trim().split(':').map(Number);
+                                let adTime = 0;
+
+                                if (timeParts.length === 1) {
+                                    adTime = timeParts[0];
+                                } else if (timeParts.length === 2) {
+                                    adTime = timeParts[0] * 60 + timeParts[1];
+                                }
+
+                                if (adTime > 0) {
+                                    console.log(`检测到不可跳过的广告，时长：${adTime} 秒`);
+                                    // 广告结束后自动播放
+                                    setTimeout(() => {
+                                        console.log("YouTube 广告已结束 (不可跳过)，尝试自动播放...");
+                                        const playButton = document.querySelector('.ytp-play-button');
+                                        if (playButton) {
+                                            playButton.click();
+                                        } else {
+                                            console.warn("未找到播放按钮，无法自动播放。");
+                                        }
+                                    }, (adTime + 1) * 1000); // 增加 1 秒缓冲
+                                }
+                            }
+                        }
+                    }
+                });
+            }
+        });
+    });
+
+    observer.observe(document.body, {
+        childList: true,
+        subtree: true,
+        attributes: false,
+        characterData: false
+    });
+
+    console.log('YouTube 广告跳过脚本已启动');
+
+})();
